@@ -4,7 +4,6 @@ import (
 	"log"
 	"os"
 	"sync"
-	"time"
 )
 
 // Constants and global variables
@@ -199,11 +198,8 @@ func (aq *AsyncDoubleQueue) safeRunEventLoop() bool {
 
 	task, isEmpty := aq.dequeue()
 	if isEmpty {
-		start := time.Now()
 		// wait and sleep
 		<-aq.syn
-		elapsed := time.Since(start)
-		aq.logger.Printf("Event Loop waited %s.\n", elapsed)
 		return true
 	}
 
