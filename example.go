@@ -1,4 +1,4 @@
-package main
+package asyncq
 
 import (
 	"fmt"
@@ -7,15 +7,15 @@ import (
 )
 
 func example() {
-	var queue AsyncQ[int]
-	queue = NewAsyncDoubleQueue[int](10, log.New(os.Stdout, "", 0))
+
+	var queue AsyncQ
+	queue = NewAsyncDoubleQueue(10, log.New(os.Stdout, "", 0))
 
 	go queue.RunEventLoop()
+	defer queue.Close()
 
 	word := "world"
 	queue.Enqueue(func() {
 		fmt.Printf("Hello, %s!\n", word)
 	})
-
-	queue.Close()
 }
