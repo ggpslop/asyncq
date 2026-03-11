@@ -1,4 +1,7 @@
 # AsyncQ
+
+![Go Report Card](https://goreportcard.com/badge/github.com/ggpslop/asyncq) [![Go Doc](https://godoc.org/github.com/ggpslop/asyncq?status.svg)](https://pkg.go.dev/github.com/ggpslop/asyncq)
+
 #### Simple and Fast Asynchronous Queue and Event Loop in GO.
 
 ### Implementations
