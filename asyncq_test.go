@@ -3,6 +3,8 @@ package asyncq
 import (
 	"log"
 	"os"
+	"runtime"
+	"sync"
 	"testing"
 	"time"
 )
@@ -203,24 +205,65 @@ func TestAsyncDoubleQueue_dequeueIsOk_WhenNoTasks(t *testing.T) {
 	}
 }
 
-func TestAsyncDoubleQueue_RunEventLoopIsOk(t *testing.T) {
+func TestAsyncDoubleQueue_IncrementSingleSharedCounter(t *testing.T) {
 
-	var initCap = 10
-	var queue = NewAsyncDoubleQueue(initCap, logger)
-	var value = new(int)
-	*value = 0
+	var cores = runtime.NumCPU()
+	var tests = []struct {
+		name        string
+		nGoroutines int
+		nEnqueue    int
+	}{
+		{
+			name:        "100 Enqueue x 1 Goroutines",
+			nGoroutines: 1,
+			nEnqueue:    100,
+		},
+		{
+			name:        "1 Enqueue x 100 Goroutines",
+			nGoroutines: 100,
+			nEnqueue:    1,
+		},
+		{
+			name:        "100 Enqueue x CPU Cores Goroutines",
+			nGoroutines: cores,
+			nEnqueue:    100,
+		},
+		{
+			name:        "100 Enqueue x (CPU Core x 5 Goroutines)",
+			nGoroutines: cores * 5,
+			nEnqueue:    100,
+		},
+	}
 
+	var queue = NewAsyncDoubleQueue(10, logger)
 	go queue.RunEventLoop()
 	defer queue.Close()
 
-	queue.Enqueue(func() { *value++ })
-	queue.Enqueue(func() { *value++ })
-	queue.Enqueue(func() { *value++ })
-	queue.Enqueue(func() { *value++ })
-	queue.Enqueue(func() { *value++ })
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 
-	time.Sleep(1 * time.Second)
-	if *value != 5 {
-		t.Fatalf("value = %d, expected 5", *value)
+			var value = new(int)
+			*value = 0
+			var task = func() { *value = *value + 1 }
+
+			var wg sync.WaitGroup
+			wg.Add(test.nGoroutines)
+
+			for j := 0; j < test.nGoroutines; j++ {
+				go func() {
+					for i := 0; i < test.nEnqueue; i++ {
+						queue.Enqueue(task)
+					}
+					wg.Done()
+				}()
+			}
+
+			wg.Wait()
+			time.Sleep(1 * time.Second)
+			var total = test.nEnqueue * test.nGoroutines
+			if *value != total {
+				t.Fatalf("value = %d, expected %d", *value, total)
+			}
+		})
 	}
 }

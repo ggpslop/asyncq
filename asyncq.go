@@ -152,9 +152,7 @@ func (aq *AsyncDoubleQueue) exchangeQueues() bool {
 		return false
 	}
 
-	tmp := aq.inputQueue
-	aq.inputQueue = aq.outputQueue[:0]
-	aq.outputQueue = tmp
+	aq.inputQueue, aq.outputQueue = aq.outputQueue[:0], aq.inputQueue
 
 	return true
 }
