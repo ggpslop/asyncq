@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+	"time"
 )
 
 var (
@@ -339,5 +340,35 @@ func TestAsyncDoubleQueue_IncrementSingleSharedCounter(t *testing.T) {
 				t.Fatalf("value = %d, expected %d", value, total)
 			}
 		})
+	}
+}
+
+func TestAsyncDoubleQueue_SlowConsumeFastProduce(t *testing.T) {
+
+	var queue = NewAsyncDoubleQueue(10, logger)
+	go queue.RunEventLoop()
+
+	const totalTask = 10
+	const total = 4
+
+	var value = 0
+	var task = func() {
+		value++
+	}
+
+	for j := 0; j < total; j++ {
+		for i := 0; i < totalTask; i++ {
+			queue.Enqueue(task)
+		}
+		queue.Enqueue(func() {
+			time.Sleep(500 * time.Millisecond)
+		})
+	}
+
+	var wait = queue.Close()
+	wait()
+
+	if value != total*totalTask {
+		t.Fatalf("value = %d, expected %d", value, total*totalTask)
 	}
 }
