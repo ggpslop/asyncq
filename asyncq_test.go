@@ -124,7 +124,7 @@ func TestAsyncDoubleQueue_EnqueueIsOk_WhenNilInput(t *testing.T) {
 	}
 }
 
-func TestAsyncDoubleQueue_CloseIsOk(t *testing.T) {
+func TestAsyncDoubleQueue_Close(t *testing.T) {
 
 	var initCap = 10
 	var syn = make(chan bool)
@@ -141,12 +141,68 @@ func TestAsyncDoubleQueue_CloseIsOk(t *testing.T) {
 	}()
 	queue.Close()
 
-	if len(queue.inputQueue) != 1 {
-		t.Fatalf("input queue length is not equal to 1")
+	if len(queue.inputQueue) != 2 {
+		t.Fatalf("input queue length is not equal to 2")
 	}
-	if queue.inputQueue[0] != nil {
+	if queue.inputQueue[1] != nil {
 		t.Fatalf("input queue is not closed")
 	}
+}
+
+func TestAsyncDoubleQueue_CloseWait(t *testing.T) {
+
+	var queue = NewAsyncDoubleQueue(10, logger)
+	go queue.RunEventLoop()
+
+	const total = 100
+	var value = new(int)
+	*value = 0
+	var task = func() { *value = *value + 1 }
+
+	for i := 0; i < total; i++ {
+		queue.Enqueue(task)
+	}
+	var queueWait = queue.Close()
+
+	queueWait()
+	if *value != total {
+		t.Fatalf("value is not equal to %d", total)
+	}
+	_, closed := <-queue.syn
+	if closed {
+		t.Fatalf("queue was not closed")
+	}
+}
+
+func TestAsyncDoubleQueue_EnqueueAfterClose_ShouldPanic(t *testing.T) {
+
+	var queue = NewAsyncDoubleQueue(10, logger)
+	go queue.RunEventLoop()
+
+	const total = 100
+	var value = new(int)
+	*value = 0
+	var task = func() { *value = *value + 1 }
+
+	for i := 0; i < total; i++ {
+		queue.Enqueue(task)
+	}
+	var queueWait = queue.Close()
+
+	defer func() {
+
+		queueWait()
+		if *value != total {
+			t.Fatalf("value is not equal to %d", total)
+		}
+
+		var r = recover()
+		if r == nil {
+			t.Fatal("should have panicked")
+		}
+	}()
+
+	queue.Enqueue(task) // panic because the queue is closed.
 }
 
 func TestAsyncDoubleQueue_dequeueIsOk_WhenSingleTask(t *testing.T) {
@@ -201,6 +257,29 @@ func TestAsyncDoubleQueue_dequeueIsOk_WhenNoTasks(t *testing.T) {
 	}
 	if task != nil {
 		t.Fatalf("task is not nil")
+	}
+}
+
+func TestAsyncDoubleQueue_PanicIsRecovered(t *testing.T) {
+
+	var queue = NewAsyncDoubleQueue(10, logger)
+	go queue.RunEventLoop()
+	defer queue.Close()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	var value = new(int)
+	*value = 0
+
+	queue.Enqueue(func() { panic("I'm in panic!") })
+	queue.Enqueue(func() {
+		*value = *value + 1
+		wg.Done()
+	})
+	wg.Wait()
+	if *value != 1 {
+		t.Fatalf("value is not equal to 1")
 	}
 }
 

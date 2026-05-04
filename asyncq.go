@@ -10,7 +10,9 @@ import (
 
 const defaultCap = 10
 
-// Structs and interfaces
+// Types, structs and interfaces
+
+type WaitFunc func()
 
 type Mutex interface {
 	Lock()
@@ -32,8 +34,9 @@ type AsyncQ interface {
 	// useful when a lock mechanism is used, like a mutex.
 	TryEnqueue(task func()) bool
 
-	// Close the queue. No more tasks can be enqueued.
-	Close()
+	// Close the queue and no more tasks can be enqueued. It returns a wait
+	// function to be used to graceful shutting down the queue.
+	Close() WaitFunc
 
 	// RunEventLoop start the event loop. It must be started in a new goroutine.
 	RunEventLoop()
@@ -92,9 +95,9 @@ func (aq *AsyncDoubleQueue) Enqueue(task func()) {
 
 	select {
 	case aq.syn <- true:
-		// wake up the event loop
+		// Wake up the event loop.
 	default:
-		// event loop is already awake
+		// Event loop is already awake.
 	}
 }
 
@@ -114,30 +117,39 @@ func (aq *AsyncDoubleQueue) TryEnqueue(task func()) bool {
 
 	select {
 	case aq.syn <- true:
-		// wake up the event loop
+		// Wake up the event loop.
 	default:
-		// event loop is already awake
+		// Event loop is already awake.
 	}
 
 	return true
 }
 
-// Close the event loop (add a nil task to the inputQueue) and the channel.
-func (aq *AsyncDoubleQueue) Close() {
+// Close the event loop and the channel.
+// It uses sync.WaitGroup with counter = 1 to create a 'wait' function,
+// that it then returns. To close the event loop, it adds 2 task to the
+// inputQueue, a task with sync.WaitGroup.Done and a nil task that is
+// recognized by the event loop logic.
+func (aq *AsyncDoubleQueue) Close() WaitFunc {
 
 	aq.mutex.Lock()
 	defer aq.mutex.Unlock()
 
-	aq.inputQueue = append(aq.inputQueue, nil)
+	var wg sync.WaitGroup // escaped to heap.
+	wg.Add(1)
+
+	aq.inputQueue = append(aq.inputQueue, func() { wg.Done() }, nil)
 
 	select {
 	case aq.syn <- true:
-		// wake up the event loop
+		// Wake up the event loop.
 	default:
-		// event loop is already awake
+		// Event loop is already awake.
 	}
 
 	close(aq.syn)
+
+	return wg.Wait
 }
 
 // exchangeQueues exchanges the input and output queues. This method is
@@ -178,34 +190,40 @@ func (aq *AsyncDoubleQueue) dequeue() (func(), bool) {
 
 func (aq *AsyncDoubleQueue) RunEventLoop() {
 
-	aq.logger.Println("Starting the Async Event Loop")
+	aq.logger.Println("AsyncQ - starting the Async Event Loop")
 
 	for aq.safeRunEventLoop() {
-		// empty body
-		// panic can't stop the event loop
+		// Empty body. Panic can't stop the event loop.
 	}
 }
 
-func (aq *AsyncDoubleQueue) safeRunEventLoop() bool {
+func (aq *AsyncDoubleQueue) safeRunEventLoop() (result bool) {
+
+	// Set to 'true' immediately to prevent the loop from
+	// ending prematurely in case of panic.
+	result = true
 
 	defer func() {
 		if r := recover(); r != nil {
-			aq.logger.Println("Recover from panic.")
+			aq.logger.Println("AsyncQ - recover from panic.")
 		}
 	}()
 
 	task, isEmpty := aq.dequeue()
 	if isEmpty {
-		// wait and sleep
+		// Wait and sleep.
 		<-aq.syn
-		return true
+		return
 	}
 
 	if task == nil {
-		aq.logger.Println("Closing the Async Event Loop")
-		return false
+		// Set 'false' before calling the logger, so the closing of
+		// the queue is not bypassed in case of panic.
+		result = false
+		aq.logger.Println("AsyncQ - closing the Async Event Loop")
+		return
 	}
 
 	task()
-	return true
+	return
 }
