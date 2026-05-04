@@ -6,7 +6,6 @@ import (
 	"runtime"
 	"sync"
 	"testing"
-	"time"
 )
 
 var (
@@ -242,25 +241,26 @@ func TestAsyncDoubleQueue_IncrementSingleSharedCounter(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 
+			var total = test.nEnqueue * test.nGoroutines
+			var wg sync.WaitGroup
+			wg.Add(total)
+
 			var value = new(int)
 			*value = 0
-			var task = func() { *value = *value + 1 }
-
-			var wg sync.WaitGroup
-			wg.Add(test.nGoroutines)
+			var task = func() {
+				*value = *value + 1
+				wg.Done()
+			}
 
 			for j := 0; j < test.nGoroutines; j++ {
 				go func() {
 					for i := 0; i < test.nEnqueue; i++ {
 						queue.Enqueue(task)
 					}
-					wg.Done()
 				}()
 			}
 
 			wg.Wait()
-			time.Sleep(1 * time.Second)
-			var total = test.nEnqueue * test.nGoroutines
 			if *value != total {
 				t.Fatalf("value = %d, expected %d", *value, total)
 			}
