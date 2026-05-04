@@ -155,9 +155,8 @@ func TestAsyncDoubleQueue_CloseWait(t *testing.T) {
 	go queue.RunEventLoop()
 
 	const total = 100
-	var value = new(int)
-	*value = 0
-	var task = func() { *value = *value + 1 }
+	var value = 0
+	var task = func() { value++ }
 
 	for i := 0; i < total; i++ {
 		queue.Enqueue(task)
@@ -165,7 +164,7 @@ func TestAsyncDoubleQueue_CloseWait(t *testing.T) {
 	var queueWait = queue.Close()
 
 	queueWait()
-	if *value != total {
+	if value != total {
 		t.Fatalf("value is not equal to %d", total)
 	}
 	_, closed := <-queue.syn
@@ -180,9 +179,8 @@ func TestAsyncDoubleQueue_EnqueueAfterClose_ShouldPanic(t *testing.T) {
 	go queue.RunEventLoop()
 
 	const total = 100
-	var value = new(int)
-	*value = 0
-	var task = func() { *value = *value + 1 }
+	var value = 0
+	var task = func() { value++ }
 
 	for i := 0; i < total; i++ {
 		queue.Enqueue(task)
@@ -192,7 +190,7 @@ func TestAsyncDoubleQueue_EnqueueAfterClose_ShouldPanic(t *testing.T) {
 	defer func() {
 
 		queueWait()
-		if *value != total {
+		if value != total {
 			t.Fatalf("value is not equal to %d", total)
 		}
 
@@ -214,9 +212,8 @@ func TestAsyncDoubleQueue_dequeueIsOk_WhenSingleTask(t *testing.T) {
 		mutex:       fakeMutex,
 	}
 
-	var value = new(int)
-	*value = 0
-	queue.inputQueue = append(queue.inputQueue, func() { *value++ })
+	var value = 0
+	queue.inputQueue = append(queue.inputQueue, func() { value++ })
 
 	queue.exchangeQueues()
 
@@ -227,7 +224,7 @@ func TestAsyncDoubleQueue_dequeueIsOk_WhenSingleTask(t *testing.T) {
 	}
 	task()
 
-	if *value != 1 {
+	if value != 1 {
 		t.Fatalf("value is not equal to 1")
 	}
 
@@ -269,16 +266,15 @@ func TestAsyncDoubleQueue_PanicIsRecovered(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var value = new(int)
-	*value = 0
+	var value = 0
 
 	queue.Enqueue(func() { panic("I'm in panic!") })
 	queue.Enqueue(func() {
-		*value = *value + 1
+		value = value + 1
 		wg.Done()
 	})
 	wg.Wait()
-	if *value != 1 {
+	if value != 1 {
 		t.Fatalf("value is not equal to 1")
 	}
 }
@@ -324,10 +320,9 @@ func TestAsyncDoubleQueue_IncrementSingleSharedCounter(t *testing.T) {
 			var wg sync.WaitGroup
 			wg.Add(total)
 
-			var value = new(int)
-			*value = 0
+			var value = 0
 			var task = func() {
-				*value = *value + 1
+				value++
 				wg.Done()
 			}
 
@@ -340,8 +335,8 @@ func TestAsyncDoubleQueue_IncrementSingleSharedCounter(t *testing.T) {
 			}
 
 			wg.Wait()
-			if *value != total {
-				t.Fatalf("value = %d, expected %d", *value, total)
+			if value != total {
+				t.Fatalf("value = %d, expected %d", value, total)
 			}
 		})
 	}

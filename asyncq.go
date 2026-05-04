@@ -71,6 +71,7 @@ func NewAsyncDoubleQueue(initCap int, logger *log.Logger) *AsyncDoubleQueue {
 	if initCap < defaultCap {
 		initCap = defaultCap
 	}
+	initCap += 2 // for the 2 close tasks.
 
 	return &AsyncDoubleQueue{
 		inputQueue:  make([]func(), 0, initCap),
